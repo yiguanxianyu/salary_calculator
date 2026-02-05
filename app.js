@@ -104,6 +104,13 @@ const calcTax = (amount, brackets) => {
   return amount * b.rate - b.quick;
 };
 
+const calcBonusTaxSeparate = (bonus) => {
+  if (bonus <= 0) return 0;
+  const avg = bonus / 12;
+  const b = bonusBrackets.find((item) => avg <= item.cap) || bonusBrackets[bonusBrackets.length - 1];
+  return bonus * b.rate - b.quick;
+};
+
 const calc = () => {
   const monthlySalary = Number(el("monthlySalary").value) || 0;
   const bonus = getBonus(monthlySalary);
@@ -149,8 +156,7 @@ const calc = () => {
   const salaryAnnualTax = calcTax(salaryAnnualTaxable, annualBrackets);
 
   if (state.taxMode === "separate") {
-    const avg = bonus / 12;
-    bonusTax = calcTax(avg, bonusBrackets) * 12;
+    bonusTax = calcBonusTaxSeparate(bonus);
     salaryTax = salaryAnnualTax;
     annualTax = salaryAnnualTax + bonusTax;
     monthlyTax = salaryAnnualTax / 12;
@@ -241,7 +247,7 @@ const calc = () => {
     `==================== 年终奖部分 ====================`,
     `年终奖总额：${fmt(bonus)} 元`,
     state.taxMode === "separate" 
-      ? `年终奖税（分别计税）：${fmt(bonusTax)} 元`
+      ? `年终奖税（分别计税）：年终奖 ÷ 12 分档后，按总额计算 = ${fmt(bonusTax)} 元`
       : `年终奖税（合并计税中已分摊）：${fmt(bonusTax)} 元`,
     `年终奖到手：${fmt(bonusNet)} 元`,
     ``,
@@ -416,15 +422,15 @@ const saveCalcExplainAsImage = async () => {
     ctx.fillText(line, padding, padding + index * lineHeight);
   });
   
-  // 转换为 WebP
+  // 转换为 PNG
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `工资计算-${new Date().toISOString().split("T")[0]}.webp`;
+    a.download = `工资计算-${new Date().toISOString().split("T")[0]}.png`;
     a.click();
     URL.revokeObjectURL(url);
-  }, "image/webp", 0.95);
+  }, "image/png");
 };
 
 const init = () => {
