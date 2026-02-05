@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>工资计算器</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <h1>工资计算器</h1>
+        <p class="sub">
+          支持年终奖计税方式、社保/公积金基数与比例、专项扣除、合并/分别计税。
+        </p>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="card">
+        <h2>收入</h2>
+        <div class="field">
+          <label>月薪（税前）</label>
+          <div class="inline">
+            <input id="monthlySalary" type="number" value="5000" min="0" />
+            <span>元</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>年终奖</label>
+
+          <div class="bonus-inline">
+            <div class="seg">
+              <button type="button" class="seg-btn active" data-tax-mode="separate">分别计税</button>
+              <button type="button" class="seg-btn" data-tax-mode="combined">合并计税</button>
+            </div>
+            <div class="seg">
+              <button type="button" class="seg-btn active" data-bonus-mode="months">按月数</button>
+              <button type="button" class="seg-btn" data-bonus-mode="fixed">固定金额</button>
+            </div>
+            <div class="inline">
+              <input id="bonusValue" type="number" value="2" min="0" />
+              <span id="bonusUnit">个月</span>
+            </div>
+          </div>
+          <div class="subtext" id="bonusHint">按月数计算：年终奖 = 月薪 × 月数</div>
+        </div>
+        <div class="field">
+          <label>每月专项扣除</label>
+          <button id="addDeduction" type="button" class="ghost add-deduction-btn">+ 添加扣除项</button>
+          <div id="deductionList" class="deductions"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>社保与公积金</h2>
+        <div class="field">
+          <label>省份</label>
+          <select id="province"></select>
+          <div class="inline">
+            <span>基数下限</span>
+            <strong id="ssMinText">-</strong>
+            <span>基数上限</span>
+            <strong id="ssCapText">-</strong>
+          </div>
+          <input id="ssMin" type="hidden" value="0" />
+          <input id="ssCap" type="hidden" value="0" />
+        </div>
+        <div class="field">
+          <label>基数计算方式</label>
+          <div class="seg">
+            <button type="button" class="seg-btn active" data-base-mode="monthly">按月薪</button>
+            <button type="button" class="seg-btn" data-base-mode="annualavg">按年薪月均</button>
+            <button type="button" class="seg-btn" data-base-mode="manual">手动设置</button>
+          </div>
+          <div id="baseHint" class="subtext">
+            年薪月均 = (月薪 × 12 + 年终奖) ÷ 12
+          </div>
+        </div>
+        <div class="field">
+          <label>社保/公积金基数</label>
+          <input id="ssBase" type="number" value="15000" min="0" />
+          <div id="ssWarn" class="warn"></div>
+        </div>
+        <div class="field">
+          <label>社保个人比例</label>
+          <div class="inline">
+            <input id="ssPersonalRate" type="number" value="10.5" min="0" step="0.1" />
+            <span>%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>公积金比例</label>
+          <div class="seg">
+            <button type="button" class="seg-btn active" data-pf-mode="equal">对等</button>
+            <button type="button" class="seg-btn" data-pf-mode="custom">自定义</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>公积金个人比例</label>
+          <div class="inline">
+            <input id="pfPersonalRate" type="number" value="12" min="0" step="0.1" />
+            <span>%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>公积金单位比例</label>
+          <div class="inline">
+            <input id="pfEmployerRate" type="number" value="12" min="0" step="0.1" />
+            <span>%</span>
+          </div>
+        </div>
+        <div class="subtext">公积金基数与社保基数强制一致，且上下限同步。</div>
+      </div>
+
+    </section>
+
+    <section class="results">
+      <div class="card">
+        <h2>结果概览</h2>
+        <div class="summary">
+          <div>
+            <p class="label">平均每月税后工资</p>
+            <p id="monthlyNet" class="value">-</p>
+          </div>
+          <div>
+            <p class="label">税后年收入 - 工资部分</p>
+            <p id="annualSalaryNet" class="value">-</p>
+          </div>
+          <div>
+            <p class="label">税后年收入 - 公积金部分</p>
+            <p id="annualPfNet" class="value">-</p>
+          </div>
+          <div>
+            <p class="label">税后年收入 - 年终奖部分</p>
+            <p id="annualBonusNet" class="value">-</p>
+          </div>
+          <div>
+            <p class="label">税后年收入总计</p>
+            <p id="annualNet" class="value">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>明细</h2>
+        <div class="detail" id="detailTable"></div>
+        <div class="field">
+          <div class="calc-header">
+            <label>计算过程说明</label>
+            <button id="saveAsImage" type="button" class="ghost">保存为图片</button>
+          </div>
+          <textarea id="calcExplain" rows="20" readonly></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="tax-tables">
+      <div class="card">
+        <h2>个税税率表</h2>
+        <div class="field">
+          <label>个税税率表（年）</label>
+          <table class="tax-table">
+            <thead>
+              <tr>
+                <th>年应纳税所得额上限</th>
+                <th>税率</th>
+                <th>速算扣除数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>36,000</td>
+                <td>3%</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <td>144,000</td>
+                <td>10%</td>
+                <td>2,520</td>
+              </tr>
+              <tr>
+                <td>300,000</td>
+                <td>20%</td>
+                <td>16,920</td>
+              </tr>
+              <tr>
+                <td>420,000</td>
+                <td>25%</td>
+                <td>31,920</td>
+              </tr>
+              <tr>
+                <td>660,000</td>
+                <td>30%</td>
+                <td>52,920</td>
+              </tr>
+              <tr>
+                <td>960,000</td>
+                <td>35%</td>
+                <td>85,920</td>
+              </tr>
+              <tr>
+                <td>∞</td>
+                <td>45%</td>
+                <td>181,920</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="subtext">起征点 5000 已内置，表内为年税率档。</div>
+        </div>
+        <div class="field">
+          <label>年终奖分别计税（按月换算）</label>
+          <table class="tax-table">
+            <thead>
+              <tr>
+                <th>月应纳税所得额上限</th>
+                <th>税率</th>
+                <th>速算扣除数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>3,000</td>
+                <td>3%</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <td>12,000</td>
+                <td>10%</td>
+                <td>210</td>
+              </tr>
+              <tr>
+                <td>25,000</td>
+                <td>20%</td>
+                <td>1,410</td>
+              </tr>
+              <tr>
+                <td>35,000</td>
+                <td>25%</td>
+                <td>2,660</td>
+              </tr>
+              <tr>
+                <td>55,000</td>
+                <td>30%</td>
+                <td>4,410</td>
+              </tr>
+              <tr>
+                <td>80,000</td>
+                <td>35%</td>
+                <td>7,160</td>
+              </tr>
+              <tr>
+                <td>∞</td>
+                <td>45%</td>
+                <td>15,160</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
