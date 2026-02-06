@@ -31,6 +31,10 @@ const bonusBrackets = [
   { cap: Infinity, rate: 0.45, quick: 15160 },
 ];
 
+const PENSION_RATE = 0.08;
+const MEDICAL_RATE = 0.02;
+const UNEMPLOYMENT_RATE = 0.005;
+
 const provinceBases = [
   { name: "北京", avg: 11937, min: 7162, max: 35811 },
   { name: "天津", avg: 8540, min: 5124, max: 25620 },
@@ -122,17 +126,20 @@ const calc = () => {
   const pfCap = ssCap;
 
   const base = getBaseValue(monthlySalary, bonus);
-  const ssBase = clampBase(base.ss, ssMin, ssCap);
-  const pfBase = clampBase(base.pf, pfMin, pfCap);
+  const clampEnabled = state.baseMode !== "manual";
+  const ssBase = clampEnabled ? clampBase(base.ss, ssMin, ssCap) : base.ss;
+  const pfBase = clampEnabled ? clampBase(base.pf, pfMin, pfCap) : base.pf;
 
-  const ssPersonalRate = (Number(el("ssPersonalRate").value) || 0) / 100;
   const pfPersonalRate = (Number(el("pfPersonalRate").value) || 0) / 100;
   const pfEmployerRate =
     state.pfMode === "equal"
       ? pfPersonalRate
       : (Number(el("pfEmployerRate").value) || 0) / 100;
 
-  const ssPersonal = ssBase * ssPersonalRate;
+  const pensionPersonal = ssBase * PENSION_RATE;
+  const medicalPersonal = ssBase * MEDICAL_RATE;
+  const unemploymentPersonal = ssBase * UNEMPLOYMENT_RATE;
+  const ssPersonal = pensionPersonal + medicalPersonal + unemploymentPersonal;
   const pfPersonal = pfBase * pfPersonalRate;
   const pfEmployer = pfBase * pfEmployerRate;
 
@@ -179,22 +186,26 @@ const calc = () => {
   el("annualSalaryNet").textContent = `${fmt(monthlyNet * 12)} 元`;
   el("annualPfNet").textContent = `${fmt((pfPersonal + pfEmployer) * 12)} 元`;
   el("annualBonusNet").textContent = `${fmt(bonusNet)} 元`;
+  el("annualMedicalAccount").textContent = `${fmt(medicalPersonal * 12)} 元`;
   el("annualNet").textContent = `${fmt(annualNet)} 元`;
 
   const ssWarn = el("ssWarn");
   ssWarn.textContent = "";
-  if (base.ss < ssMin && ssMin) {
+  if (!clampEnabled) {
+    ssWarn.textContent = "手动设置基数：不应用上下限";
+  } else if (base.ss < ssMin && ssMin) {
     ssWarn.textContent = `基数低于下限，已按 ${fmt(ssMin)} 元计算`;
   } else if (base.ss > ssCap && ssCap) {
     ssWarn.textContent = `基数高于上限，已按 ${fmt(ssCap)} 元计算`;
   }
 
-  const monthlyTaxLabel =
-    state.taxMode === "separate" ? "月度个税" : "月度个税(均摊)";
   const salaryMonthlyTaxLabel =
     state.taxMode === "separate" ? "工资月度个税" : "工资月度个税(均摆)";
   const detail = [
-    ["社保个人（月）", ssPersonal],
+    ["养老保险个人（月）", pensionPersonal],
+    ["医疗保险个人（月）", medicalPersonal],
+    ["失业保险个人（月）", unemploymentPersonal],
+    ["社保个人合计（月）", ssPersonal],
     ["公积金个人（月）", pfPersonal],
     ["公积金单位（月）", pfEmployer],
     ["专项扣除合计（月）", deductionsMonthly],
@@ -210,54 +221,75 @@ const calc = () => {
     )
     .join("");
 
-  if (state.baseMode !== "manual") {
+  if (clampEnabled) {
     el("ssBase").value = Math.round(ssBase);
   }
 
   const annualTaxable = annualGross - annualPersonal - annualDeduct;
   
   el("calcExplain").value = [
-    `==================== 输入信息 ====================`,
+    `=============== 输入信息 ===============`,
     `月薪：${fmt(monthlySalary)} 元`,
     `年终奖：${fmt(bonus)} 元（${state.bonusMode === "months" ? "按月数" : "固定金额"}）`,
-    `社保/公积金基数：${fmt(ssBase)} 元（上下限 ${fmt(ssMin)} - ${fmt(ssCap)}）`,
-    `计税方式：${state.taxMode === "separate" ? "分别计税" : "合并计税"}`,
+    `社保/公积金基数：${fmt(ssBase)} 元（下限 ${fmt(ssMin)} - 上限 ${fmt(ssCap)}）`,
+    `年终奖计税方式：${state.taxMode === "separate" ? "分别计税" : "合并计税"}`,
     ``,
-    `==================== 工资部分 ====================`,
+    `=============== 社保与公积金 ===============`,
+    `【社保个人部分】`,
+    `  • 养老保险（8%）`,
+    `    每月：${fmt(ssBase)} × 8% = ${fmt(pensionPersonal)} 元`,
+    `    全年：${fmt(pensionPersonal)} × 12 = ${fmt(pensionPersonal * 12)} 元`,
+    `  • 医疗保险（2%）`,
+    `    每月：${fmt(ssBase)} × 2% = ${fmt(medicalPersonal)} 元`,
+    `    全年：${fmt(medicalPersonal)} × 12 = ${fmt(medicalPersonal * 12)} 元`,
+    `  • 失业保险（0.5%）`,
+    `    每月：${fmt(ssBase)} × 0.5% = ${fmt(unemploymentPersonal)} 元`,
+    `    全年：${fmt(unemploymentPersonal)} × 12 = ${fmt(unemploymentPersonal * 12)} 元`,
+    `  • 社保个人合计`,
+    `    每月：${fmt(ssPersonal)} 元`,
+    `    全年：${fmt(ssPersonal * 12)} 元`,
+    ``,
+    `【公积金部分】`,
+    `  • 公积金个人（${fmt(pfPersonalRate * 100)}%）`,
+    `    每月：${fmt(pfBase)} × ${fmt(pfPersonalRate * 100)}% = ${fmt(pfPersonal)} 元`,
+    `    全年：${fmt(pfPersonal * 12)} 元`,
+    `  • 公积金单位（${fmt(pfEmployerRate * 100)}%）`,
+    `    每月：${fmt(pfBase)} × ${fmt(pfEmployerRate * 100)}% = ${fmt(pfEmployer)} 元`,
+    `    全年：${fmt(pfEmployer * 12)} 元`,
+    `  • 公积金合计（个人+单位）`,
+    `    全年：${fmt((pfPersonal + pfEmployer) * 12)} 元`,
+    ``,
+    `=============== 工资部分 ===============`,
     `工资总额：${fmt(monthlySalary * 12)} 元/年`,
-    `社保个人：${fmt(ssPersonal)} 元/月 × 12 = ${fmt(ssPersonal * 12)} 元/年`,
-    `公积金个人：${fmt(pfPersonal)} 元/月 × 12 = ${fmt(pfPersonal * 12)} 元/年`,
-    `专项扣除合计：${fmt(deductionsMonthly)} 元/月 × 12 = ${fmt(deductionsMonthly * 12)} 元/年`,
-    `起征点：5,000 元/月 × 12 = 60,000 元/年`,
+    `减：社保个人：${fmt(ssPersonal * 12)} 元/年`,
+    `减：公积金个人：${fmt(pfPersonal * 12)} 元/年`,
+    `减：专项扣除合计：${fmt(deductionsMonthly * 12)} 元/年`,
+    `减：起征点：60,000 元/年`,
     state.taxMode === "separate"
-      ? `工资年度应纳税所得额：${fmt(monthlySalary * 12)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000 = ${fmt(salaryAnnualTaxable)} 元`
-      : `年度应纳税所得额（工资+年终奖）：${fmt(annualGross)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000 = ${fmt(annualTaxable)} 元`,
+      ? `工资年度应纳税所得额：\n  ${fmt(monthlySalary * 12)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000\n  = ${fmt(salaryAnnualTaxable)} 元`
+      : `年度应纳税所得额（工资+年终奖）：\n  ${fmt(annualGross)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000\n  = ${fmt(annualTaxable)} 元`,
     state.taxMode === "separate"
       ? `工资年度个税：${fmt(salaryAnnualTax)} 元`
-      : `年度总个税：${fmt(annualTax)} 元（其中工资部分 ${fmt(salaryAnnualTax)} 元，年终奖部分 ${fmt(bonusTax)} 元）`,
+      : `年度总个税：${fmt(annualTax)} 元\n  （其中工资部分 ${fmt(salaryAnnualTax)} 元，年终奖部分 ${fmt(bonusTax)} 元）`,
     `工资月度个税：${fmt(salaryAnnualTax / 12)} 元/月`,
     `每月税后工资：${fmt(monthlyNet)} 元`,
     `年度税后工资：${fmt(monthlyNet * 12)} 元`,
     ``,
-    `==================== 公积金部分 ====================`,
-    `公积金个人：${fmt(pfPersonal)} 元/月 × 12 = ${fmt(pfPersonal * 12)} 元/年`,
-    `公积金单位：${fmt(pfEmployer)} 元/月 × 12 = ${fmt(pfEmployer * 12)} 元/年`,
-    `公积金合计：${fmt((pfPersonal + pfEmployer) * 12)} 元/年`,
-    ``,
-    `==================== 年终奖部分 ====================`,
+    `=============== 年终奖部分 ===============`,
     `年终奖总额：${fmt(bonus)} 元`,
     state.taxMode === "separate" 
-      ? `年终奖税（分别计税）：年终奖 ÷ 12 分档后，按总额计算 = ${fmt(bonusTax)} 元`
+      ? `年终奖税（分别计税）：\n  年终奖 ÷ 12 分档后，按总额计算 = ${fmt(bonusTax)} 元`
       : `年终奖税（合并计税中已分摊）：${fmt(bonusTax)} 元`,
     `年终奖到手：${fmt(bonusNet)} 元`,
     ``,
-    `==================== 总计 ====================`,
+    `=============== 总计 ===============`,
     `税后年收入 - 工资部分：${fmt(monthlyNet * 12)} 元`,
     `税后年收入 - 公积金部分：${fmt((pfPersonal + pfEmployer) * 12)} 元`,
     `税后年收入 - 年终奖部分：${fmt(bonusNet)} 元`,
+    `医保个人账户（不计入税后年收入）：${fmt(medicalPersonal * 12)} 元`,
     `税后年收入总计：${fmt(annualNet)} 元`,
     ``,
-    `答验算式：${fmt(monthlyNet * 12)} + ${fmt((pfPersonal + pfEmployer) * 12)} + ${fmt(bonusNet)} = ${fmt(annualNet)} 元`,
+    `验算：${fmt(monthlyNet * 12)} + ${fmt((pfPersonal + pfEmployer) * 12)} + ${fmt(bonusNet)} = ${fmt(annualNet)} 元`,
   ].join("\n");
 };
 
@@ -397,7 +429,7 @@ const saveCalcExplainAsImage = async () => {
   const padding = 40;
   const lines = text.split("\n");
   
-  const logicalWidth = 1200;
+  const logicalWidth = 800;
   const logicalHeight = lines.length * lineHeight + padding * 2;
   
   // 设置物理像素尺寸
