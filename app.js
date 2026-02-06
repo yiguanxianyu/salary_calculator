@@ -155,6 +155,8 @@ const calc = () => {
   let monthlyNet = 0;
   let bonusNet = 0;
   let annualNet = 0;
+  let bonusAvg = 0;
+  let bonusBracket = null;
 
   const annualGross = monthlySalary * 12 + bonus;
   const annualPersonal = (ssPersonal + pfPersonal) * 12;
@@ -163,6 +165,8 @@ const calc = () => {
   const salaryAnnualTax = calcTax(salaryAnnualTaxable, annualBrackets);
 
   if (state.taxMode === "separate") {
+    bonusAvg = bonus / 12;
+    bonusBracket = bonusBrackets.find((item) => bonusAvg <= item.cap) || bonusBrackets[bonusBrackets.length - 1];
     bonusTax = calcBonusTaxSeparate(bonus);
     salaryTax = salaryAnnualTax;
     annualTax = salaryAnnualTax + bonusTax;
@@ -266,8 +270,8 @@ const calc = () => {
     `减：专项扣除合计：${fmt(deductionsMonthly * 12)} 元/年`,
     `减：起征点：60,000 元/年`,
     state.taxMode === "separate"
-      ? `工资年度应纳税所得额：\n  ${fmt(monthlySalary * 12)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000\n  = ${fmt(salaryAnnualTaxable)} 元`
-      : `年度应纳税所得额（工资+年终奖）：\n  ${fmt(annualGross)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000\n  = ${fmt(annualTaxable)} 元`,
+      ? `工资年度应纳税所得额：\n  ${fmt(monthlySalary * 12)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000  = ${fmt(salaryAnnualTaxable)} 元`
+      : `年度应纳税所得额（工资+年终奖）：\n  ${fmt(annualGross)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000  = ${fmt(annualTaxable)} 元`,
     state.taxMode === "separate"
       ? `工资年度个税：${fmt(salaryAnnualTax)} 元`
       : `年度总个税：${fmt(annualTax)} 元\n  （其中工资部分 ${fmt(salaryAnnualTax)} 元，年终奖部分 ${fmt(bonusTax)} 元）`,
@@ -277,8 +281,10 @@ const calc = () => {
     ``,
     `=============== 年终奖部分 ===============`,
     `年终奖总额：${fmt(bonus)} 元`,
-    state.taxMode === "separate" 
-      ? `年终奖税（分别计税）：\n  年终奖 ÷ 12 分档后，按总额计算 = ${fmt(bonusTax)} 元`
+    state.taxMode === "separate" && bonus > 0
+      ? `年终奖税（分别计税）：\n  ① 年终奖 ÷ 12：${fmt(bonus)} ÷ 12 = ${fmt(bonusAvg)} 元\n  ② 查询税率表，${fmt(bonusAvg)} 元落在税率 ${fmt(bonusBracket.rate * 100)}% 档\n     速算扣除数：${fmt(bonusBracket.quick)} 元\n  ③ 计算个税：${fmt(bonus)} × ${fmt(bonusBracket.rate * 100)}% - ${fmt(bonusBracket.quick)} = ${fmt(bonusTax)} 元`
+      : state.taxMode === "separate"
+      ? `年终奖税（分别计税）：0 元`
       : `年终奖税（合并计税中已分摊）：${fmt(bonusTax)} 元`,
     `年终奖到手：${fmt(bonusNet)} 元`,
     ``,
@@ -287,9 +293,7 @@ const calc = () => {
     `税后年收入 - 公积金部分：${fmt((pfPersonal + pfEmployer) * 12)} 元`,
     `税后年收入 - 年终奖部分：${fmt(bonusNet)} 元`,
     `医保个人账户（不计入税后年收入）：${fmt(medicalPersonal * 12)} 元`,
-    `税后年收入总计：${fmt(annualNet)} 元`,
-    ``,
-    `验算：${fmt(monthlyNet * 12)} + ${fmt((pfPersonal + pfEmployer) * 12)} + ${fmt(bonusNet)} = ${fmt(annualNet)} 元`,
+    `税后年收入总计：${fmt(annualNet)} 元`
   ].join("\n");
 };
 
