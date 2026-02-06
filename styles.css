@@ -39,13 +39,6 @@ body {
   margin-bottom: 28px;
 }
 
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 12px;
-  color: var(--muted);
-}
-
 h1 {
   margin: 10px 0 8px;
   font-size: 44px;
@@ -56,16 +49,6 @@ h1 {
   color: var(--muted);
   max-width: 560px;
   font-size: 16px;
-}
-
-.hero-card {
-  background: var(--surface);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  padding: 18px;
-  display: grid;
-  gap: 18px;
-  box-shadow: var(--shadow);
 }
 
 .grid {
@@ -90,12 +73,6 @@ h2 {
 
 .field {
   margin-bottom: 14px;
-}
-
-.field.two {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
 }
 
 label {
@@ -150,19 +127,6 @@ select {
   background: #faf6ef;
 }
 
-.seg.full {
-  width: 100%;
-}
-
-.seg.full .seg-btn {
-  flex: 1;
-}
-
-.seg.small {
-  transform: scale(0.96);
-  transform-origin: left;
-}
-
 .seg-btn {
   border: none;
   background: transparent;
@@ -175,11 +139,6 @@ select {
 .seg-btn.active {
   background: var(--accent);
   color: #fff;
-}
-
-.bonus {
-  display: grid;
-  gap: 10px;
 }
 
 .bonus-inline {
@@ -233,56 +192,6 @@ select {
   font-size: 16px;
   font-weight: 600;
   color: var(--accent-2);
-}
-
-.base-settings-inline {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.base-settings-inline .seg {
-  flex-shrink: 0;
-}
-
-.base-settings-inline .inline {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.base-settings-inline .inline label {
-  margin: 0;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.base-settings-inline .inline span {
-  white-space: nowrap;
-}
-
-.pf-mode-inline {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.pf-mode-inline .seg {
-  flex-shrink: 0;
-}
-
-.pf-mode-inline .inline {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.pf-mode-inline .inline label {
-  margin: 0;
-  font-size: 14px;
-  white-space: nowrap;
 }
 
 .subtext {

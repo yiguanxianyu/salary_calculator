@@ -1,3 +1,11 @@
+const MONTHS_IN_YEAR = 12;
+const MONTHLY_STD_DEDUCTION = 5000;
+const SOCIAL_RATES = {
+  pension: 0.08,
+  medical: 0.02,
+  unemployment: 0.005,
+};
+
 const fmt = (n) =>
   Number.isFinite(n)
     ? n.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -30,10 +38,6 @@ const bonusBrackets = [
   { cap: 80000, rate: 0.35, quick: 7160 },
   { cap: Infinity, rate: 0.45, quick: 15160 },
 ];
-
-const PENSION_RATE = 0.08;
-const MEDICAL_RATE = 0.02;
-const UNEMPLOYMENT_RATE = 0.005;
 
 const provinceBases = [
   { name: "北京", avg: 11937, min: 7162, max: 35811 },
@@ -70,27 +74,14 @@ const provinceBases = [
 ];
 
 const el = (id) => document.getElementById(id);
+const getNumber = (id) => Number(el(id).value) || 0;
+const pickBracket = (amount, brackets) =>
+  brackets.find((item) => amount <= item.cap) || brackets[brackets.length - 1];
 
 const applySeg = (selector, value, key) => {
   document.querySelectorAll(selector).forEach((btn) => {
     btn.classList.toggle("active", btn.dataset[key] === value);
   });
-};
-
-
-const getBonus = (monthlySalary) => {
-  const val = Number(el("bonusValue").value) || 0;
-  return state.bonusMode === "months" ? monthlySalary * val : val;
-};
-
-const getBaseValue = (monthlySalary, bonus) => {
-  if (state.baseMode === "manual") {
-    const ssBase = Number(el("ssBase").value) || 0;
-    return { ss: ssBase, pf: ssBase };
-  }
-  const monthlyAvg = (monthlySalary * 12 + bonus) / 12;
-  const base = state.baseMode === "annualavg" ? monthlyAvg : monthlySalary;
-  return { ss: base, pf: base };
 };
 
 const clampBase = (base, min, max) => {
@@ -104,118 +95,161 @@ const clampBase = (base, min, max) => {
 
 const calcTax = (amount, brackets) => {
   if (amount <= 0) return 0;
-  const b = brackets.find((item) => amount <= item.cap) || brackets[brackets.length - 1];
-  return amount * b.rate - b.quick;
+  const bracket = pickBracket(amount, brackets);
+  return amount * bracket.rate - bracket.quick;
 };
 
 const calcBonusTaxSeparate = (bonus) => {
   if (bonus <= 0) return 0;
-  const avg = bonus / 12;
-  const b = bonusBrackets.find((item) => avg <= item.cap) || bonusBrackets[bonusBrackets.length - 1];
-  return bonus * b.rate - b.quick;
+  const avg = bonus / MONTHS_IN_YEAR;
+  const bracket = pickBracket(avg, bonusBrackets);
+  return bonus * bracket.rate - bracket.quick;
 };
 
-const calc = () => {
-  const monthlySalary = Number(el("monthlySalary").value) || 0;
+const getBonus = (monthlySalary) => {
+  const value = getNumber("bonusValue");
+  return state.bonusMode === "months" ? monthlySalary * value : value;
+};
+
+const getBaseValue = (monthlySalary, bonus) => {
+  if (state.baseMode === "manual") {
+    const manualBase = getNumber("ssBase");
+    return { ss: manualBase, pf: manualBase };
+  }
+  const monthlyAvg = (monthlySalary * MONTHS_IN_YEAR + bonus) / MONTHS_IN_YEAR;
+  const base = state.baseMode === "annualavg" ? monthlyAvg : monthlySalary;
+  return { ss: base, pf: base };
+};
+
+const getDeductionsMonthly = () =>
+  state.deductions.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+
+const computeFinance = () => {
+  const monthlySalary = getNumber("monthlySalary");
   const bonus = getBonus(monthlySalary);
-
-  const stdDeduction = 5000;
-  const ssMin = Number(el("ssMin").value) || 0;
-  const ssCap = Number(el("ssCap").value) || 0;
-  const pfMin = ssMin;
-  const pfCap = ssCap;
-
-  const base = getBaseValue(monthlySalary, bonus);
+  const ssMin = getNumber("ssMin");
+  const ssCap = getNumber("ssCap");
   const clampEnabled = state.baseMode !== "manual";
+  const base = getBaseValue(monthlySalary, bonus);
   const ssBase = clampEnabled ? clampBase(base.ss, ssMin, ssCap) : base.ss;
-  const pfBase = clampEnabled ? clampBase(base.pf, pfMin, pfCap) : base.pf;
+  const pfBase = clampEnabled ? clampBase(base.pf, ssMin, ssCap) : base.pf;
 
-  const pfPersonalRate = (Number(el("pfPersonalRate").value) || 0) / 100;
+  const pfPersonalRate = getNumber("pfPersonalRate") / 100;
   const pfEmployerRate =
-    state.pfMode === "equal"
-      ? pfPersonalRate
-      : (Number(el("pfEmployerRate").value) || 0) / 100;
+    state.pfMode === "equal" ? pfPersonalRate : getNumber("pfEmployerRate") / 100;
 
-  const pensionPersonal = ssBase * PENSION_RATE;
-  const medicalPersonal = ssBase * MEDICAL_RATE;
-  const unemploymentPersonal = ssBase * UNEMPLOYMENT_RATE;
+  const pensionPersonal = ssBase * SOCIAL_RATES.pension;
+  const medicalPersonal = ssBase * SOCIAL_RATES.medical;
+  const unemploymentPersonal = ssBase * SOCIAL_RATES.unemployment;
   const ssPersonal = pensionPersonal + medicalPersonal + unemploymentPersonal;
   const pfPersonal = pfBase * pfPersonalRate;
   const pfEmployer = pfBase * pfEmployerRate;
 
-  const deductionsMonthly = state.deductions.reduce(
-    (sum, item) => sum + (Number(item.value) || 0),
-    0
-  );
+  const deductionsMonthly = getDeductionsMonthly();
+  const annualGross = monthlySalary * MONTHS_IN_YEAR + bonus;
+  const annualPersonal = (ssPersonal + pfPersonal) * MONTHS_IN_YEAR;
+  const annualDeduct = (MONTHLY_STD_DEDUCTION + deductionsMonthly) * MONTHS_IN_YEAR;
+  const salaryAnnualTaxable =
+    monthlySalary * MONTHS_IN_YEAR - annualPersonal - annualDeduct;
+  const annualTaxable = annualGross - annualPersonal - annualDeduct;
+  const salaryAnnualTax = calcTax(salaryAnnualTaxable, annualBrackets);
+  const salaryMonthlyTax = salaryAnnualTax / MONTHS_IN_YEAR;
 
-  let bonusTax = 0;
   let annualTax = 0;
-  let salaryTax = 0;
-  let monthlyTax = 0;
-  let monthlyNet = 0;
-  let bonusNet = 0;
-  let annualNet = 0;
+  let bonusTax = 0;
   let bonusAvg = 0;
   let bonusBracket = null;
 
-  const annualGross = monthlySalary * 12 + bonus;
-  const annualPersonal = (ssPersonal + pfPersonal) * 12;
-  const annualDeduct = stdDeduction * 12 + deductionsMonthly * 12;
-  const salaryAnnualTaxable = monthlySalary * 12 - annualPersonal - annualDeduct;
-  const salaryAnnualTax = calcTax(salaryAnnualTaxable, annualBrackets);
-
   if (state.taxMode === "separate") {
-    bonusAvg = bonus / 12;
-    bonusBracket = bonusBrackets.find((item) => bonusAvg <= item.cap) || bonusBrackets[bonusBrackets.length - 1];
+    annualTax = salaryAnnualTax;
     bonusTax = calcBonusTaxSeparate(bonus);
-    salaryTax = salaryAnnualTax;
-    annualTax = salaryAnnualTax + bonusTax;
-    monthlyTax = salaryAnnualTax / 12;
-    monthlyNet = monthlySalary - ssPersonal - pfPersonal - monthlyTax;
-    bonusNet = bonus - bonusTax;
-    annualNet = monthlyNet * 12 + bonusNet + (pfPersonal + pfEmployer) * 12;
+    annualTax += bonusTax;
+    bonusAvg = bonus / MONTHS_IN_YEAR;
+    bonusBracket = pickBracket(bonusAvg, bonusBrackets);
   } else {
-    const annualTaxable = annualGross - annualPersonal - annualDeduct;
     annualTax = calcTax(annualTaxable, annualBrackets);
-    salaryTax = salaryAnnualTax;
     bonusTax = annualTax - salaryAnnualTax;
-    monthlyTax = annualTax / 12;
-    const salaryMonthlyTax = salaryAnnualTax / 12;
-    monthlyNet = monthlySalary - ssPersonal - pfPersonal - salaryMonthlyTax;
-    bonusNet = bonus - bonusTax;
-    annualNet = monthlyNet * 12 + bonusNet + (pfPersonal + pfEmployer) * 12;
   }
 
-  el("monthlyNet").textContent = `${fmt(monthlyNet)} 元`;
-  el("annualSalaryNet").textContent = `${fmt(monthlyNet * 12)} 元`;
-  el("annualPfNet").textContent = `${fmt((pfPersonal + pfEmployer) * 12)} 元`;
-  el("annualBonusNet").textContent = `${fmt(bonusNet)} 元`;
-  el("annualMedicalAccount").textContent = `${fmt(medicalPersonal * 12)} 元`;
-  el("annualNet").textContent = `${fmt(annualNet)} 元`;
+  const monthlyNet = monthlySalary - ssPersonal - pfPersonal - salaryMonthlyTax;
+  const bonusNet = bonus - bonusTax;
+  const annualNet =
+    monthlyNet * MONTHS_IN_YEAR + bonusNet + (pfPersonal + pfEmployer) * MONTHS_IN_YEAR;
 
+  return {
+    annualDeduct,
+    annualGross,
+    annualNet,
+    annualPersonal,
+    annualTax,
+    annualTaxable,
+    base,
+    bonus,
+    bonusAvg,
+    bonusBracket,
+    bonusNet,
+    bonusTax,
+    clampEnabled,
+    deductionsMonthly,
+    medicalPersonal,
+    monthlyNet,
+    monthlySalary,
+    pensionPersonal,
+    pfBase,
+    pfEmployer,
+    pfEmployerRate,
+    pfPersonal,
+    pfPersonalRate,
+    salaryAnnualTax,
+    salaryAnnualTaxable,
+    salaryMonthlyTax,
+    ssBase,
+    ssCap,
+    ssMin,
+    ssPersonal,
+    unemploymentPersonal,
+  };
+};
+
+const renderSummary = (data) => {
+  el("monthlyNet").textContent = `${fmt(data.monthlyNet)} 元`;
+  el("annualSalaryNet").textContent = `${fmt(data.monthlyNet * MONTHS_IN_YEAR)} 元`;
+  el("annualPfNet").textContent = `${fmt((data.pfPersonal + data.pfEmployer) * MONTHS_IN_YEAR)} 元`;
+  el("annualBonusNet").textContent = `${fmt(data.bonusNet)} 元`;
+  el("annualMedicalAccount").textContent = `${fmt(data.medicalPersonal * MONTHS_IN_YEAR)} 元`;
+  el("annualNet").textContent = `${fmt(data.annualNet)} 元`;
+};
+
+const renderSsWarn = (data) => {
   const ssWarn = el("ssWarn");
   ssWarn.textContent = "";
-  if (!clampEnabled) {
+  if (!data.clampEnabled) {
     ssWarn.textContent = "手动设置基数：不应用上下限";
-  } else if (base.ss < ssMin && ssMin) {
-    ssWarn.textContent = `基数低于下限，已按 ${fmt(ssMin)} 元计算`;
-  } else if (base.ss > ssCap && ssCap) {
-    ssWarn.textContent = `基数高于上限，已按 ${fmt(ssCap)} 元计算`;
+    return;
   }
+  if (data.base.ss < data.ssMin && data.ssMin) {
+    ssWarn.textContent = `基数低于下限，已按 ${fmt(data.ssMin)} 元计算`;
+    return;
+  }
+  if (data.base.ss > data.ssCap && data.ssCap) {
+    ssWarn.textContent = `基数高于上限，已按 ${fmt(data.ssCap)} 元计算`;
+  }
+};
 
+const renderDetailTable = (data) => {
   const salaryMonthlyTaxLabel =
     state.taxMode === "separate" ? "工资月度个税" : "工资月度个税(均摆)";
   const detail = [
-    ["养老保险个人（月）", pensionPersonal],
-    ["医疗保险个人（月）", medicalPersonal],
-    ["失业保险个人（月）", unemploymentPersonal],
-    ["社保个人合计（月）", ssPersonal],
-    ["公积金个人（月）", pfPersonal],
-    ["公积金单位（月）", pfEmployer],
-    ["专项扣除合计（月）", deductionsMonthly],
-    [salaryMonthlyTaxLabel, state.taxMode === "separate" ? monthlyTax : salaryAnnualTax / 12],
-    ["年终奖税", bonusTax],
-    ["年度个税", annualTax],
+    ["养老保险个人（月）", data.pensionPersonal],
+    ["医疗保险个人（月）", data.medicalPersonal],
+    ["失业保险个人（月）", data.unemploymentPersonal],
+    ["社保个人合计（月）", data.ssPersonal],
+    ["公积金个人（月）", data.pfPersonal],
+    ["公积金单位（月）", data.pfEmployer],
+    ["专项扣除合计（月）", data.deductionsMonthly],
+    [salaryMonthlyTaxLabel, data.salaryMonthlyTax],
+    ["年终奖税", data.bonusTax],
+    ["年度个税", data.annualTax],
   ];
 
   el("detailTable").innerHTML = detail
@@ -224,77 +258,111 @@ const calc = () => {
         `<div class="detail-row"><span>${label}</span><strong>${fmt(value)} 元</strong></div>`
     )
     .join("");
+};
 
-  if (clampEnabled) {
-    el("ssBase").value = Math.round(ssBase);
-  }
+const buildExplain = (data) => {
+  const bonusModeText = state.bonusMode === "months" ? "按月数" : "固定金额";
+  const taxModeText = state.taxMode === "separate" ? "分别计税" : "合并计税";
+  const annualPersonalTotal = data.annualPersonal;
+  const annualPfTotal = (data.pfPersonal + data.pfEmployer) * MONTHS_IN_YEAR;
+  const annualSalaryNet = data.monthlyNet * MONTHS_IN_YEAR;
 
-  const annualTaxable = annualGross - annualPersonal - annualDeduct;
-  
-  el("calcExplain").value = [
+  return [
     `=============== 输入信息 ===============`,
-    `月薪：${fmt(monthlySalary)} 元`,
-    `年终奖：${fmt(bonus)} 元（${state.bonusMode === "months" ? "按月数" : "固定金额"}）`,
-    `社保/公积金基数：${fmt(ssBase)} 元（下限 ${fmt(ssMin)} - 上限 ${fmt(ssCap)}）`,
-    `年终奖计税方式：${state.taxMode === "separate" ? "分别计税" : "合并计税"}`,
+    `月薪：${fmt(data.monthlySalary)} 元`,
+    `年终奖：${fmt(data.bonus)} 元（${bonusModeText}）`,
+    `社保/公积金基数：${fmt(data.ssBase)} 元（下限 ${fmt(data.ssMin)} - 上限 ${fmt(data.ssCap)}）`,
+    `年终奖计税方式：${taxModeText}`,
     ``,
     `=============== 社保与公积金 ===============`,
     `【社保个人部分】`,
     `  • 养老保险（8%）`,
-    `    每月：${fmt(ssBase)} × 8% = ${fmt(pensionPersonal)} 元`,
-    `    全年：${fmt(pensionPersonal)} × 12 = ${fmt(pensionPersonal * 12)} 元`,
+    `    每月：${fmt(data.ssBase)} × 8% = ${fmt(data.pensionPersonal)} 元`,
+    `    全年：${fmt(data.pensionPersonal)} × 12 = ${fmt(data.pensionPersonal * MONTHS_IN_YEAR)} 元`,
     `  • 医疗保险（2%）`,
-    `    每月：${fmt(ssBase)} × 2% = ${fmt(medicalPersonal)} 元`,
-    `    全年：${fmt(medicalPersonal)} × 12 = ${fmt(medicalPersonal * 12)} 元`,
+    `    每月：${fmt(data.ssBase)} × 2% = ${fmt(data.medicalPersonal)} 元`,
+    `    全年：${fmt(data.medicalPersonal)} × 12 = ${fmt(data.medicalPersonal * MONTHS_IN_YEAR)} 元`,
     `  • 失业保险（0.5%）`,
-    `    每月：${fmt(ssBase)} × 0.5% = ${fmt(unemploymentPersonal)} 元`,
-    `    全年：${fmt(unemploymentPersonal)} × 12 = ${fmt(unemploymentPersonal * 12)} 元`,
+    `    每月：${fmt(data.ssBase)} × 0.5% = ${fmt(data.unemploymentPersonal)} 元`,
+    `    全年：${fmt(data.unemploymentPersonal)} × 12 = ${fmt(
+      data.unemploymentPersonal * MONTHS_IN_YEAR
+    )} 元`,
     `  • 社保个人合计`,
-    `    每月：${fmt(ssPersonal)} 元`,
-    `    全年：${fmt(ssPersonal * 12)} 元`,
+    `    每月：${fmt(data.ssPersonal)} 元`,
+    `    全年：${fmt(data.ssPersonal * MONTHS_IN_YEAR)} 元`,
     ``,
     `【公积金部分】`,
-    `  • 公积金个人（${fmt(pfPersonalRate * 100)}%）`,
-    `    每月：${fmt(pfBase)} × ${fmt(pfPersonalRate * 100)}% = ${fmt(pfPersonal)} 元`,
-    `    全年：${fmt(pfPersonal * 12)} 元`,
-    `  • 公积金单位（${fmt(pfEmployerRate * 100)}%）`,
-    `    每月：${fmt(pfBase)} × ${fmt(pfEmployerRate * 100)}% = ${fmt(pfEmployer)} 元`,
-    `    全年：${fmt(pfEmployer * 12)} 元`,
+    `  • 公积金个人（${fmt(data.pfPersonalRate * 100)}%）`,
+    `    每月：${fmt(data.pfBase)} × ${fmt(data.pfPersonalRate * 100)}% = ${fmt(data.pfPersonal)} 元`,
+    `    全年：${fmt(data.pfPersonal * MONTHS_IN_YEAR)} 元`,
+    `  • 公积金单位（${fmt(data.pfEmployerRate * 100)}%）`,
+    `    每月：${fmt(data.pfBase)} × ${fmt(data.pfEmployerRate * 100)}% = ${fmt(data.pfEmployer)} 元`,
+    `    全年：${fmt(data.pfEmployer * MONTHS_IN_YEAR)} 元`,
     `  • 公积金合计（个人+单位）`,
-    `    全年：${fmt((pfPersonal + pfEmployer) * 12)} 元`,
+    `    全年：${fmt(annualPfTotal)} 元`,
     ``,
     `=============== 工资部分 ===============`,
-    `工资总额：${fmt(monthlySalary * 12)} 元/年`,
-    `减：社保个人：${fmt(ssPersonal * 12)} 元/年`,
-    `减：公积金个人：${fmt(pfPersonal * 12)} 元/年`,
-    `减：专项扣除合计：${fmt(deductionsMonthly * 12)} 元/年`,
+    `工资总额：${fmt(data.monthlySalary * MONTHS_IN_YEAR)} 元/年`,
+    `减：社保个人：${fmt(data.ssPersonal * MONTHS_IN_YEAR)} 元/年`,
+    `减：公积金个人：${fmt(data.pfPersonal * MONTHS_IN_YEAR)} 元/年`,
+    `减：专项扣除合计：${fmt(data.deductionsMonthly * MONTHS_IN_YEAR)} 元/年`,
     `减：起征点：60,000 元/年`,
     state.taxMode === "separate"
-      ? `工资年度应纳税所得额：\n  ${fmt(monthlySalary * 12)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000  = ${fmt(salaryAnnualTaxable)} 元`
-      : `年度应纳税所得额（工资+年终奖）：\n  ${fmt(annualGross)} - ${fmt((ssPersonal + pfPersonal) * 12)} - ${fmt(deductionsMonthly * 12)} - 60,000  = ${fmt(annualTaxable)} 元`,
+      ? `工资年度应纳税所得额：\n  ${fmt(data.monthlySalary * MONTHS_IN_YEAR)} - ${fmt(
+          annualPersonalTotal
+        )} - ${fmt(data.deductionsMonthly * MONTHS_IN_YEAR)} - 60,000  = ${fmt(
+          data.salaryAnnualTaxable
+        )} 元`
+      : `年度应纳税所得额（工资+年终奖）：\n  ${fmt(data.annualGross)} - ${fmt(
+          annualPersonalTotal
+        )} - ${fmt(data.deductionsMonthly * MONTHS_IN_YEAR)} - 60,000  = ${fmt(
+          data.annualTaxable
+        )} 元`,
     state.taxMode === "separate"
-      ? `工资年度个税：${fmt(salaryAnnualTax)} 元`
-      : `年度总个税：${fmt(annualTax)} 元\n  （其中工资部分 ${fmt(salaryAnnualTax)} 元，年终奖部分 ${fmt(bonusTax)} 元）`,
-    `工资月度个税：${fmt(salaryAnnualTax / 12)} 元/月`,
-    `每月税后工资：${fmt(monthlyNet)} 元`,
-    `年度税后工资：${fmt(monthlyNet * 12)} 元`,
+      ? `工资年度个税：${fmt(data.salaryAnnualTax)} 元`
+      : `年度总个税：${fmt(data.annualTax)} 元\n  （其中工资部分 ${fmt(
+          data.salaryAnnualTax
+        )} 元，年终奖部分 ${fmt(data.bonusTax)} 元）`,
+    `工资月度个税：${fmt(data.salaryMonthlyTax)} 元/月`,
+    `每月税后工资：${fmt(data.monthlyNet)} 元`,
+    `年度税后工资：${fmt(annualSalaryNet)} 元`,
     ``,
     `=============== 年终奖部分 ===============`,
-    `年终奖总额：${fmt(bonus)} 元`,
-    state.taxMode === "separate" && bonus > 0
-      ? `年终奖税（分别计税）：\n  ① 年终奖 ÷ 12：${fmt(bonus)} ÷ 12 = ${fmt(bonusAvg)} 元\n  ② 查询税率表，${fmt(bonusAvg)} 元落在税率 ${fmt(bonusBracket.rate * 100)}% 档\n     速算扣除数：${fmt(bonusBracket.quick)} 元\n  ③ 计算个税：${fmt(bonus)} × ${fmt(bonusBracket.rate * 100)}% - ${fmt(bonusBracket.quick)} = ${fmt(bonusTax)} 元`
+    `年终奖总额：${fmt(data.bonus)} 元`,
+    state.taxMode === "separate" && data.bonus > 0
+      ? `年终奖税（分别计税）：\n  ① 年终奖 ÷ 12：${fmt(data.bonus)} ÷ 12 = ${fmt(
+          data.bonusAvg
+        )} 元\n  ② 查询税率表，${fmt(data.bonusAvg)} 元落在税率 ${fmt(
+          data.bonusBracket.rate * 100
+        )}% 档\n     速算扣除数：${fmt(data.bonusBracket.quick)} 元\n  ③ 计算个税：${fmt(
+          data.bonus
+        )} × ${fmt(data.bonusBracket.rate * 100)}% - ${fmt(data.bonusBracket.quick)} = ${fmt(
+          data.bonusTax
+        )} 元`
       : state.taxMode === "separate"
       ? `年终奖税（分别计税）：0 元`
-      : `年终奖税（合并计税中已分摊）：${fmt(bonusTax)} 元`,
-    `年终奖到手：${fmt(bonusNet)} 元`,
+      : `年终奖税（合并计税中已分摊）：${fmt(data.bonusTax)} 元`,
+    `年终奖到手：${fmt(data.bonusNet)} 元`,
     ``,
     `=============== 总计 ===============`,
-    `税后年收入 - 工资部分：${fmt(monthlyNet * 12)} 元`,
-    `税后年收入 - 公积金部分：${fmt((pfPersonal + pfEmployer) * 12)} 元`,
-    `税后年收入 - 年终奖部分：${fmt(bonusNet)} 元`,
-    `医保个人账户（不计入税后年收入）：${fmt(medicalPersonal * 12)} 元`,
-    `税后年收入总计：${fmt(annualNet)} 元`
+    `税后年收入 - 工资部分：${fmt(annualSalaryNet)} 元`,
+    `税后年收入 - 公积金部分：${fmt(annualPfTotal)} 元`,
+    `税后年收入 - 年终奖部分：${fmt(data.bonusNet)} 元`,
+    `医保个人账户（不计入税后年收入）：${fmt(data.medicalPersonal * MONTHS_IN_YEAR)} 元`,
+    `税后年收入总计：${fmt(data.annualNet)} 元`,
   ].join("\n");
+};
+
+const calc = () => {
+  const data = computeFinance();
+  renderSummary(data);
+  renderSsWarn(data);
+  renderDetailTable(data);
+  el("calcExplain").value = buildExplain(data);
+
+  if (data.clampEnabled) {
+    el("ssBase").value = Math.round(data.ssBase);
+  }
 };
 
 const fillProvince = (provinceName) => {
@@ -309,14 +377,33 @@ const fillProvince = (provinceName) => {
 const renderDeductions = () => {
   const container = el("deductionList");
   container.innerHTML = "";
+
   state.deductions.forEach((item, idx) => {
     const row = document.createElement("div");
     row.className = "deduction-item";
-    row.innerHTML = `
-      <input type="text" value="${item.name}" data-idx="${idx}" data-field="name" />
-      <input type="number" value="${item.value}" min="0" data-idx="${idx}" data-field="value" />
-      <button type="button" class="ghost" data-remove="${idx}">移除</button>
-    `;
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = item.name;
+    nameInput.dataset.idx = String(idx);
+    nameInput.dataset.field = "name";
+
+    const valueInput = document.createElement("input");
+    valueInput.type = "number";
+    valueInput.value = item.value;
+    valueInput.min = "0";
+    valueInput.dataset.idx = String(idx);
+    valueInput.dataset.field = "value";
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "ghost";
+    removeButton.dataset.remove = String(idx);
+    removeButton.textContent = "移除";
+
+    row.appendChild(nameInput);
+    row.appendChild(valueInput);
+    row.appendChild(removeButton);
     container.appendChild(row);
   });
 };
@@ -331,46 +418,59 @@ const updatePfMode = () => {
   if (state.pfMode === "equal") {
     employerInput.value = el("pfPersonalRate").value;
     employerInput.disabled = true;
-  } else {
-    employerInput.disabled = false;
+    return;
   }
+  employerInput.disabled = false;
+};
+
+const updateBonusUi = () => {
+  const isMonths = state.bonusMode === "months";
+  el("bonusUnit").textContent = isMonths ? "个月" : "元";
+  el("bonusHint").textContent = isMonths
+    ? "按月数计算：年终奖 = 月薪 × 月数"
+    : "固定金额：直接输入年终奖金额";
+};
+
+const setMode = (key, value, selector, options = {}) => {
+  const { afterChange, syncButton = true } = options;
+  state[key] = value;
+  if (syncButton) {
+    applySeg(selector, value, key);
+  }
+  if (afterChange) {
+    afterChange();
+  }
+  calc();
 };
 
 const bind = () => {
   document.addEventListener("click", (event) => {
     const target = event.target;
+
     if (target.matches("[data-bonus-mode]")) {
-      state.bonusMode = target.dataset.bonusMode;
-      applySeg("[data-bonus-mode]", state.bonusMode, "bonusMode");
-      const unit = state.bonusMode === "months" ? "个月" : "元";
-      el("bonusUnit").textContent = unit;
-      el("bonusHint").textContent =
-        state.bonusMode === "months"
-          ? "按月数计算：年终奖 = 月薪 × 月数"
-          : "固定金额：直接输入年终奖金额";
-      calc();
+      setMode("bonusMode", target.dataset.bonusMode, "[data-bonus-mode]", {
+        afterChange: updateBonusUi,
+      });
       return;
     }
 
     if (target.matches("[data-base-mode]")) {
-      state.baseMode = target.dataset.baseMode;
-      applySeg("[data-base-mode]", state.baseMode, "baseMode");
-      updateBaseHint();
-      calc();
+      setMode("baseMode", target.dataset.baseMode, "[data-base-mode]", {
+        afterChange: updateBaseHint,
+      });
       return;
     }
 
     if (target.matches("[data-tax-mode]")) {
-      state.taxMode = target.dataset.taxMode;
-      applySeg("[data-tax-mode]", state.taxMode, "taxMode");
-      calc();
+      setMode("taxMode", target.dataset.taxMode, "[data-tax-mode]");
       return;
     }
 
     if (target.matches("[data-pf-mode]")) {
-      state.pfMode = target.dataset.pfMode;
-      updatePfMode();
-      calc();
+      setMode("pfMode", target.dataset.pfMode, "[data-pf-mode]", {
+        afterChange: updatePfMode,
+        syncButton: false,
+      });
       return;
     }
 
@@ -397,7 +497,9 @@ const bind = () => {
     const target = event.target;
     if (target.dataset.field) {
       const idx = Number(target.dataset.idx);
-      state.deductions[idx][target.dataset.field] = target.value;
+      if (state.deductions[idx]) {
+        state.deductions[idx][target.dataset.field] = target.value;
+      }
       calc();
       return;
     }
@@ -415,51 +517,39 @@ const bind = () => {
   });
 };
 
-const saveCalcExplainAsImage = async () => {
-  const textarea = el("calcExplain");
-  const text = textarea.value;
-  
-  // 创建一个画布
+const saveCalcExplainAsImage = () => {
+  const text = el("calcExplain").value;
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
-  
-  // 设置 DPI 为 260
+  if (!ctx) return;
+
   const dpi = 260;
-  const scale = dpi / 96; // 96 是默认 DPI
-  
-  // 设置画布尺寸（逻辑像素）
+  const scale = dpi / 96;
   const fontSize = 16;
   const lineHeight = 24;
   const padding = 40;
   const lines = text.split("\n");
-  
   const logicalWidth = 800;
   const logicalHeight = lines.length * lineHeight + padding * 2;
-  
-  // 设置物理像素尺寸
+
   canvas.width = logicalWidth * scale;
   canvas.height = logicalHeight * scale;
-  
-  // 缩放画布以匹配 DPI
-  canvas.style.width = logicalWidth + "px";
-  canvas.style.height = logicalHeight + "px";
+  canvas.style.width = `${logicalWidth}px`;
+  canvas.style.height = `${logicalHeight}px`;
   ctx.scale(scale, scale);
-  
-  // 背景和样式
+
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, logicalWidth, logicalHeight);
-  
   ctx.fillStyle = "#1d1a16";
   ctx.font = `${fontSize}px 'Noto Serif SC', 'Source Han Serif SC', monospace`;
   ctx.textBaseline = "top";
-  
-  // 绘制文本
+
   lines.forEach((line, index) => {
     ctx.fillText(line, padding, padding + index * lineHeight);
   });
-  
-  // 转换为 PNG
+
   canvas.toBlob((blob) => {
+    if (!blob) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -477,13 +567,16 @@ const init = () => {
     option.textContent = item.name;
     provinceSelect.appendChild(option);
   });
+
   provinceSelect.value = "北京";
   fillProvince("北京");
   renderDeductions();
   bind();
+
   applySeg("[data-bonus-mode]", state.bonusMode, "bonusMode");
   applySeg("[data-base-mode]", state.baseMode, "baseMode");
   applySeg("[data-tax-mode]", state.taxMode, "taxMode");
+  updateBonusUi();
   updateBaseHint();
   updatePfMode();
   calc();
