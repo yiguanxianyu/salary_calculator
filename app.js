@@ -40,37 +40,37 @@ const bonusBrackets = [
 ];
 
 const provinceBases = [
-  { name: "北京", avg: 11937, min: 7162, max: 35811 },
-  { name: "天津", avg: 8540, min: 5124, max: 25620 },
-  { name: "河北", avg: 6678, min: 4007, max: 20034 },
-  { name: "山西", avg: 6997, min: 4198, max: 20991 },
-  { name: "内蒙古", avg: 8179, min: 4907, max: 24537 },
-  { name: "辽宁", avg: 7264, min: 4359, max: 21792 },
-  { name: "吉林", avg: 7322, min: 4393.2, max: 21966 },
-  { name: "黑龙江", avg: 7570, min: 4542, max: 22710 },
-  { name: "上海", avg: 12434, min: 7460, max: 37302 },
-  { name: "江苏", avg: 8254, min: 4952, max: 24762 },
-  { name: "浙江", avg: 8433, min: 4986, max: 25299 },
-  { name: "安徽", avg: 7185, min: 4311, max: 21556 },
-  { name: "福建", avg: 7535, min: 4043, max: 22607 },
-  { name: "江西", avg: 6525, min: 3915, max: 19575 },
-  { name: "山东", avg: 7506, min: 4504, max: 22518 },
-  { name: "河南", avg: 6385, min: 3831, max: 19155 },
-  { name: "湖北", avg: 7496, min: 4498, max: 22488 },
-  { name: "湖南", avg: 6787, min: 4072, max: 20361 },
-  { name: "广东", avg: 9183, min: 4775, max: 27549 },
-  { name: "广西", avg: 6905, min: 4143, max: 20715 },
-  { name: "海南", avg: 8188, min: 4912.8, max: 24564 },
-  { name: "重庆", avg: 7339, min: 4404, max: 22017 },
-  { name: "四川", avg: 7646, min: 4588, max: 22938 },
-  { name: "贵州", avg: 7324.5, min: 4394.7, max: 21973.5 },
-  { name: "云南", avg: 7263, min: 4357, max: 21789 },
-  { name: "西藏", avg: 11777, min: 7066.2, max: 35331 },
-  { name: "陕西", avg: 7750, min: 4650, max: 23250 },
-  { name: "甘肃", avg: 7338, min: 4403, max: 22014 },
-  { name: "青海", avg: 8816, min: 5289.6, max: 26448 },
-  { name: "宁夏", avg: 8258, min: 4955, max: 24774 },
-  { name: "新疆", avg: 8448, min: 5069, max: 25344 },
+  { name: "北京", min: 7162, max: 35811 },
+  { name: "天津", min: 5124, max: 25620 },
+  { name: "河北", min: 4007, max: 20034 },
+  { name: "山西", min: 4198, max: 20991 },
+  { name: "内蒙古", min: 4907, max: 24537 },
+  { name: "辽宁", min: 4359, max: 21792 },
+  { name: "吉林", min: 4393.2, max: 21966 },
+  { name: "黑龙江", min: 4542, max: 22710 },
+  { name: "上海", min: 7460, max: 37302 },
+  { name: "江苏", min: 4952, max: 24762 },
+  { name: "浙江", min: 4986, max: 25299 },
+  { name: "安徽", min: 4311, max: 21556 },
+  { name: "福建", min: 4043, max: 22607 },
+  { name: "江西", min: 3915, max: 19575 },
+  { name: "山东", min: 4504, max: 22518 },
+  { name: "河南", min: 3831, max: 19155 },
+  { name: "湖北", min: 4498, max: 22488 },
+  { name: "湖南", min: 4072, max: 20361 },
+  { name: "广东", min: 4775, max: 27549 },
+  { name: "广西", min: 4143, max: 20715 },
+  { name: "海南", min: 4912.8, max: 24564 },
+  { name: "重庆", min: 4404, max: 22017 },
+  { name: "四川", min: 4588, max: 22938 },
+  { name: "贵州", min: 4394.7, max: 21973.5 },
+  { name: "云南", min: 4357, max: 21789 },
+  { name: "西藏", min: 7066.2, max: 35331 },
+  { name: "陕西", min: 4650, max: 23250 },
+  { name: "甘肃", min: 4403, max: 22014 },
+  { name: "青海", min: 5289.6, max: 26448 },
+  { name: "宁夏", min: 4955, max: 24774 },
+  { name: "新疆", min: 5069, max: 25344 },
 ];
 
 const el = (id) => document.getElementById(id);
@@ -397,9 +397,9 @@ const renderDeductions = () => {
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
-    removeButton.className = "ghost";
+    removeButton.className = "btn-remove";
     removeButton.dataset.remove = String(idx);
-    removeButton.textContent = "移除";
+    removeButton.textContent = "×";
 
     row.appendChild(nameInput);
     row.appendChild(valueInput);
